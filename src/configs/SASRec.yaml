@@ -26,6 +26,9 @@ seqrec_module:
   predict_top_k: 10  # this value is used for validation
   filter_seen: True
   # loss: bce
+  # in_batch_negatives: True  # use labels from other samples in the batch as negatives
+  # log_q_correction: True  # subtract log(Q(item)) from logits to debias sampled softmax
+  # temperature: 0.1  # temperature for sampled softmax (default 1.0, lower = sharper)
 
 trainer_params:
   max_epochs: 100

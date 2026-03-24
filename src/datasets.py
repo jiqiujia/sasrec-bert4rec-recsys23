@@ -208,6 +208,13 @@ class PaddingCollateFn:
             collated_batch[key] = pad_sequence(values, batch_first=True,
                                                padding_value=padding_value)
 
+        # Ensure index tensors are LongTensor (required by nn.Embedding).
+        # This guards against pandas parsing numeric columns as float64
+        # (e.g. when the data file has trailing whitespace or empty lines).
+        for key in ['input_ids', 'labels', 'negatives', 'target', 'full_history']:
+            if key in collated_batch and collated_batch[key].is_floating_point():
+                collated_batch[key] = collated_batch[key].long()
+
         if 'input_ids' in collated_batch:
             attention_mask = collated_batch['input_ids'] != self.padding_value
             collated_batch['attention_mask'] = attention_mask.to(dtype=torch.float32)  

@@ -143,12 +143,22 @@ python run.py --config-name=BERT4Rec data_path=../data/ml-20m.txt dataset.max_le
 python run.py --config-name=SASRec data_path=../data/beauty.txt
 # SASRec+ 3000
 python run.py --config-name=SASRec data_path=../data/beauty.txt +dataset.num_negatives=3000
+# SASRec+ 3000 +温度系数
+python run.py --config-name=SASRec data_path=../data/beauty.txt +dataset.num_negatives=3000 +seqrec_module.temperature=0.1
 # SASRec vanilla
 python run.py --config-name=SASRec data_path=../data/beauty.txt +seqrec_module.loss=bce +dataset.num_negatives=1 dataset.full_negative_sampling=True
 # GRU4Rec
 python run.py --config-name=RNN data_path=../data/beauty.txt
 # BERT4Rec
 python run.py --config-name=BERT4Rec data_path=../data/beauty.txt
+# SASRec+ In-batch negatives + cross_entropy (sampled softmax)
+python run.py --config-name=SASRec data_path=../data/beauty.txt +seqrec_module.in_batch_negatives=True
+# SASRec+ In-batch negatives + cross_entropy + log-q correction (sampled softmax)
+python run.py --config-name=SASRec data_path=../data/beauty.txt +seqrec_module.in_batch_negatives=True +seqrec_module.log_q_correction=True
+
+# 也可以组合使用：in-batch negatives + 额外显式负采样
+python run.py --config-name=SASRec data_path=../data/beauty.txt \
+    +seqrec_module.in_batch_negatives=True +dataset.num_negatives=100
 
 # Steam
 

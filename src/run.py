@@ -45,7 +45,8 @@ def main(config):
     train_loader, eval_loader = create_dataloaders(train, validation_full, config)
     model = create_model(config, item_count=item_count)
     start_time = time.time()
-    trainer, seqrec_module = training(model, train_loader, eval_loader, config)
+    trainer, seqrec_module = training(model, train_loader, eval_loader, config,
+                                     train_data=train, item_count=item_count)
     training_time = time.time() - start_time
     print('training_time', training_time)
 
@@ -108,12 +109,16 @@ def create_dataloaders(train, validation, config):
     return train_loader, eval_loader
 
 
+def _use_sampling(config):
+    """Check if the config requires sampled loss (explicit negatives or in-batch negatives)."""
+    has_num_neg = hasattr(config.dataset, 'num_negatives') and config.dataset.num_negatives
+    has_in_batch = hasattr(config.seqrec_module, 'in_batch_negatives') and config.seqrec_module.in_batch_negatives
+    return has_num_neg or has_in_batch
+
+
 def create_model(config, item_count):
 
-    if hasattr(config.dataset, 'num_negatives') and config.dataset.num_negatives:
-        add_head = False
-    else:
-        add_head = True
+    add_head = not _use_sampling(config)
 
     if config.model == 'SASRec':
         model = SASRec(item_num=item_count, add_head=add_head, **config.model_params)
@@ -130,10 +135,22 @@ def create_model(config, item_count):
     return model
 
 
-def training(model, train_loader, eval_loader, config):
+def training(model, train_loader, eval_loader, config,
+             train_data=None, item_count=None):
 
-    if hasattr(config.dataset, 'num_negatives') and config.dataset.num_negatives:
+    if _use_sampling(config):
         seqrec_module = SeqRecWithSampling(model, **config['seqrec_module'])
+
+        # Set item frequency for log-Q correction if enabled
+        has_log_q = (hasattr(config.seqrec_module, 'log_q_correction')
+                     and config.seqrec_module.log_q_correction)
+        if has_log_q and train_data is not None and item_count is not None:
+            item_freq = torch.zeros(item_count + 1)  # +1 for padding index 0
+            freq_counts = train_data['item_id'].value_counts()
+            for item_id, count in freq_counts.items():
+                item_freq[item_id] = count
+            seqrec_module.set_item_freq(item_freq)
+            print(f'Log-Q correction enabled: {(item_freq > 0).sum().item()} items with frequency')
     else:
         seqrec_module = SeqRec(model, **config['seqrec_module'])
 
@@ -145,13 +162,14 @@ def training(model, train_loader, eval_loader, config):
     progress_bar = TQDMProgressBar(refresh_rate=100)
     callbacks=[early_stopping, model_summary, checkpoint, progress_bar]
 
-    trainer = pl.Trainer(callbacks=callbacks, gpus=1, enable_checkpointing=True,
+    trainer = pl.Trainer(callbacks=callbacks, devices=1, enable_checkpointing=True,
                          **config['trainer_params'])
 
     trainer.fit(model=seqrec_module,
             train_dataloaders=train_loader,
             val_dataloaders=eval_loader)
     
+    print(checkpoint.best_model_path)
     seqrec_module.load_state_dict(torch.load(checkpoint.best_model_path)['state_dict'])
 
     return trainer, seqrec_module
